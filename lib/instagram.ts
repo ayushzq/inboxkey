@@ -55,7 +55,7 @@ export async function fetchInstagramMedia(url: string): Promise<DownloadResult> 
         type: (m.type === "Video" || m.videoUrl) ? "video" : "image",
         downloadUrl: m.videoUrl || m.displayUrl || "",
         thumbnail: m.displayUrl || ""
-      })).filter(i => i.downloadUrl);
+      })).filter((i: MediaItem) => i.downloadUrl); // YAHAN TYPE FIX KIYA HAI
     } 
     // Agar single Reel, Video ya Image hai
     else {
