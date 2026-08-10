@@ -143,7 +143,11 @@ export async function fetchInstagramMedia(url: string): Promise<DownloadResult> 
     }
   }
 
-  const message = lastError instanceof Error ? lastError.message : "Unknown scraping error";
+  // FIX: Ab koi bhi error chhupega nahi, seedha stringify hoke screen par aayega
+  const message = lastError instanceof Error 
+    ? lastError.message 
+    : (typeof lastError === 'object' ? JSON.stringify(lastError) : String(lastError));
+    
   throw new Error(
     maxAttempts > 1
       ? `Tried ${maxAttempts} proxies and all failed. Last error: ${message}`
