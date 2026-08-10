@@ -1,6 +1,5 @@
 import type { DownloadResult, MediaItem, MediaType } from "@/types";
 
-// Sirf valid Instagram URLs ko check karne ke liye pattern
 const INSTAGRAM_URL_PATTERN =
   /^https?:\/\/(www\.)?instagram\.com\/(p|reel|reels|tv|stories)\/[A-Za-z0-9_\-.]+/i;
 
@@ -8,64 +7,58 @@ export function isSupportedInstagramUrl(url: string): boolean {
   return INSTAGRAM_URL_PATTERN.test(url.trim());
 }
 
-/**
- * Ab yeh function free third-party open-source API ka use karke video nikalega.
- * Koi proxy ya heavy libraries ki zaroorat nahi.
- */
 export async function fetchInstagramMedia(url: string): Promise<DownloadResult> {
-  try {
-    // Cobalt API call - Bina kisi proxy/key ke free video download
-    const response = await fetch("https://api.cobalt.tools/api/json", {
-      method: "POST",
-      headers: {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        url: url
-      })
-    });
+  // Vercel se tumhari RapidAPI key yahan aayegi
+  const apiKey = process.env.RAPIDAPI_KEY;
 
-    if (!response.ok) {
-      throw new Error(`API ne request block kar di (Status: ${response.status}).`);
-    }
+  if (!apiKey) {
+    throw new Error("RapidAPI Key missing hai! Vercel environment variables me RAPIDAPI_KEY set karein.");
+  }
+
+  try {
+    // Tumhari select ki hui API ka Host aur Endpoint
+    const rapidApiHost = "instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com";
+    const endpoint = `https://${rapidApiHost}/convert?url=${encodeURIComponent(url)}`;
+
+    const response = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        "x-rapidapi-host": rapidApiHost,
+        "x-rapidapi-key": apiKey
+      }
+    });
 
     const data = await response.json();
 
-    // API agar error bheje (jaise private account ya link expire)
-    if (data.status === "error" || data.status === "rate-limit") {
-      throw new Error(data.text || "Is link se video nikalne mein problem aayi.");
+    if (!response.ok) {
+      throw new Error(`API Error: ${data.message || response.statusText}`);
     }
 
     let items: MediaItem[] = [];
     let mediaType: MediaType = "video";
 
-    // Agar post mein ek se zyada photos/videos hain (Carousel)
-    if (data.picker && Array.isArray(data.picker)) {
-      mediaType = "carousel";
-      items = data.picker.map((item: any) => ({
-        type: item.type === "photo" ? "image" : "video",
-        downloadUrl: item.url,
-        thumbnail: item.thumb || ""
-      }));
-    } 
-    // Agar single video ya reel hai
-    else if (data.url) {
-      items = [{
-        type: "video",
-        downloadUrl: data.url,
-        thumbnail: ""
-      }];
-    } else {
-      throw new Error("Is link par koi valid media file nahi mili.");
+    // Data nikalne ka logic
+    const mediaData = data.data || data; 
+    const mediaList = Array.isArray(mediaData) ? mediaData : [mediaData];
+
+    items = mediaList.map((m: any) => ({
+      type: (m.type === "image" || m.is_video === false) ? "image" : "video",
+      downloadUrl: m.video_url || m.download_url || m.url || m.link || "",
+      thumbnail: m.thumbnail || m.cover || ""
+    })).filter(i => i.downloadUrl); // Khaali URLs hata do
+
+    if (items.length === 0) {
+      throw new Error(`Media link nahi mila. API Response badal gaya hai.`);
     }
+
+    mediaType = items.length > 1 ? "carousel" : items[0].type;
 
     return {
       success: true,
       sourceUrl: url,
-      title: "Instagram Downloader", // Simple title
-      caption: "",
-      username: "",
+      title: data.title || "Instagram Media",
+      caption: data.caption || "",
+      username: data.username || data.author || "",
       thumbnail: items[0]?.thumbnail || "",
       mediaType: mediaType,
       items: items
@@ -73,6 +66,6 @@ export async function fetchInstagramMedia(url: string): Promise<DownloadResult> 
 
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`API Scraping fail: ${message}`);
+    throw new Error(`RapidAPI Scraping fail: ${message}`);
   }
 }
