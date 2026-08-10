@@ -19,10 +19,12 @@ jobs:
         node-version: '20'
 
     - name: Install Packages
-      run: npm install
+      # --omit=dev lagane se sirf zaroori packages aayenge, heavy test packages ignore ho jayenge
+      run: npm install --omit=dev
 
     - name: Create ZIP file
-      run: zip -r deploy.zip . -x "*.git*" ".github/*"
+      # Faltu folders (.next, public) aur media files ko ZIP mein jaane se rokne ka logic
+      run: zip -r deploy.zip . -x "*.git*" ".github/*" ".next/*" "public/*" "*.mp4" "*.zip" "node_modules/.cache/*"
 
     - name: Deploy to AWS Lambda
       uses: appleboy/lambda-action@master
