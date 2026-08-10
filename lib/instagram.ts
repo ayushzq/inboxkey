@@ -8,58 +8,76 @@ export function isSupportedInstagramUrl(url: string): boolean {
 }
 
 export async function fetchInstagramMedia(url: string): Promise<DownloadResult> {
-  // Vercel se tumhari RapidAPI key yahan aayegi
-  const apiKey = process.env.RAPIDAPI_KEY;
+  // Ab Vercel se tumhara naya Apify Token aayega
+  const apiToken = process.env.APIFY_API_TOKEN;
 
-  if (!apiKey) {
-    throw new Error("RapidAPI Key missing hai! Vercel environment variables me RAPIDAPI_KEY set karein.");
+  if (!apiToken) {
+    throw new Error("Apify API Token missing hai! Vercel me APIFY_API_TOKEN set karein.");
   }
 
   try {
-    // Tumhari select ki hui API ka Host aur Endpoint
-    const rapidApiHost = "instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com";
-    const endpoint = `https://${rapidApiHost}/convert?url=${encodeURIComponent(url)}`;
+    // Apify ka direct endpoint jo 'apify/instagram-scraper' bot ko run karega
+    // aur wait karega jab tak data (dataset items) mil na jaye
+    const endpoint = `https://api.apify.com/v2/acts/apify~instagram-scraper/run-sync-get-dataset-items?token=${apiToken}`;
 
     const response = await fetch(endpoint, {
-      method: "GET",
+      method: "POST",
       headers: {
-        "x-rapidapi-host": rapidApiHost,
-        "x-rapidapi-key": apiKey
-      }
+        "Content-Type": "application/json",
+      },
+      // Apify bot ko hum JSON format mein URL bhej rahe hain
+      body: JSON.stringify({
+        directUrls: [url],
+        resultsType: "details"
+      })
     });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Apify Server Error: ${response.status} - ${errorText}`);
+    }
 
     const data = await response.json();
 
-    if (!response.ok) {
-      throw new Error(`API Error: ${data.message || response.statusText}`);
+    // Apify result hamesha ek array (list) mein bhejta hai
+    if (!data || data.length === 0) {
+      throw new Error("Link se koi data nahi mila. Yeh video shayad private hai.");
     }
 
+    const postData = data[0]; // Humara scraped data pehle number par hoga
     let items: MediaItem[] = [];
     let mediaType: MediaType = "video";
 
-    // Data nikalne ka logic
-    const mediaData = data.data || data; 
-    const mediaList = Array.isArray(mediaData) ? mediaData : [mediaData];
-
-    // FIX: TypeScript ko strict type batane ke liye yahan `: MediaItem` add kiya hai
-    items = mediaList.map((m: any): MediaItem => ({
-      type: (m.type === "image" || m.is_video === false) ? "image" : "video",
-      downloadUrl: m.video_url || m.download_url || m.url || m.link || "",
-      thumbnail: m.thumbnail || m.cover || ""
-    })).filter(i => i.downloadUrl); // Khaali URLs hata do
-
-    if (items.length === 0) {
-      throw new Error(`Media link nahi mila. API Response badal gaya hai.`);
+    // Agar post mein multiple photos/videos hain (Carousel)
+    if (postData.childPosts && Array.isArray(postData.childPosts) && postData.childPosts.length > 0) {
+      mediaType = "carousel";
+      items = postData.childPosts.map((m: any): MediaItem => ({
+        type: (m.type === "Video" || m.videoUrl) ? "video" : "image",
+        downloadUrl: m.videoUrl || m.displayUrl || "",
+        thumbnail: m.displayUrl || ""
+      })).filter(i => i.downloadUrl);
+    } 
+    // Agar single Reel, Video ya Image hai
+    else {
+      const isVideo = postData.type === "Video" || postData.videoUrl;
+      mediaType = isVideo ? "video" : "image";
+      items = [{
+        type: isVideo ? "video" : "image",
+        downloadUrl: postData.videoUrl || postData.displayUrl || "",
+        thumbnail: postData.displayUrl || ""
+      }];
     }
 
-    mediaType = items.length > 1 ? "carousel" : items[0].type;
+    if (items.length === 0 || !items[0].downloadUrl) {
+      throw new Error("Media link extract karne mein problem aayi.");
+    }
 
     return {
       success: true,
       sourceUrl: url,
-      title: data.title || "Instagram Media",
-      caption: data.caption || "",
-      username: data.username || data.author || "",
+      title: postData.caption ? postData.caption.substring(0, 40) + "..." : "Instagram Download",
+      caption: postData.caption || "",
+      username: postData.ownerUsername || postData.ownerFullName || "",
       thumbnail: items[0]?.thumbnail || "",
       mediaType: mediaType,
       items: items
@@ -67,6 +85,6 @@ export async function fetchInstagramMedia(url: string): Promise<DownloadResult> 
 
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`RapidAPI Scraping fail: ${message}`);
+    throw new Error(`Apify Scraping fail: ${message}`);
   }
 }
