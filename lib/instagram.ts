@@ -121,12 +121,18 @@ export async function fetchInstagramMedia(url: string): Promise<DownloadResult> 
       applyProxyToEnv(proxy);
       syncProxyIntoGlobalAgent();
 
-      // Required fresh each attempt so the package's internal HTTP client
-      // is created (and reads the proxy env vars) after they're updated.
+      // FIX: Vercel bundler compatibility logic
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { instagramGetUrl } = require("instagram-url-direct");
+      const igModule = require("instagram-url-direct");
+      
+      // Handle different export patterns (CommonJS vs transpiled ES Module)
+      const fetchIg = typeof igModule === "function" ? igModule : (igModule.default || igModule.instagramGetUrl);
+      
+      if (typeof fetchIg !== "function") {
+        throw new Error("Library function bundler ki wajah se map nahi ho paayi.");
+      }
 
-      const raw = await withTimeout(instagramGetUrl(url), perAttemptTimeoutMs);
+      const raw = await withTimeout(fetchIg(url), perAttemptTimeoutMs);
       return normalizeResult(url, raw);
     } catch (err) {
       lastError = err;
