@@ -41,7 +41,8 @@ export async function fetchInstagramMedia(url: string): Promise<DownloadResult> 
     const mediaData = data.data || data; 
     const mediaList = Array.isArray(mediaData) ? mediaData : [mediaData];
 
-    items = mediaList.map((m: any) => ({
+    // FIX: TypeScript ko strict type batane ke liye yahan `: MediaItem` add kiya hai
+    items = mediaList.map((m: any): MediaItem => ({
       type: (m.type === "image" || m.is_video === false) ? "image" : "video",
       downloadUrl: m.video_url || m.download_url || m.url || m.link || "",
       thumbnail: m.thumbnail || m.cover || ""
