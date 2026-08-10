@@ -19,12 +19,20 @@ jobs:
         node-version: '20'
 
     - name: Install Packages
-      # --omit=dev lagane se sirf zaroori packages aayenge, heavy test packages ignore ho jayenge
-      run: npm install --omit=dev
+      run: npm install
+
+    - name: Bundle Code to Single File
+      # Yeh command node_modules ke kachre ko hatakar code ko chhota karega
+      # DHYAN DEIN: Agar tumhari main file ka naam 'index.js' nahi hai, toh niche wali line mein 'index.js' ko apne file ke naam se badal dena.
+      run: |
+        npm install -g @vercel/ncc
+        ncc build index.js -m -o dist
 
     - name: Create ZIP file
-      # Faltu folders (.next, public) aur media files ko ZIP mein jaane se rokne ka logic
-      run: zip -r deploy.zip . -x "*.git*" ".github/*" ".next/*" "public/*" "*.mp4" "*.zip" "node_modules/.cache/*"
+      # Ab hum sirf chote 'dist' folder ko zip karenge
+      run: |
+        cd dist
+        zip -r ../deploy.zip .
 
     - name: Deploy to AWS Lambda
       uses: appleboy/lambda-action@master
